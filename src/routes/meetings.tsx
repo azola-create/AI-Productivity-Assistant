@@ -1,13 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { format } from "date-fns";
-import { Check, FileDown, FileText, Loader2, Sparkles } from "lucide-react";
+import { CalendarCheck, Check, FileDown, FileText, Loader2, Mail, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
 import { AiNotice, ReadAloud } from "@/components/ai-output";
-import { EmptyState } from "@/components/states";
+import { EmptyState, ErrorState, LoadingLines } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { summariseMeeting, type MeetingSummary } from "@/lib/ai.functions";
 import { exportDocx, exportPdf } from "@/lib/export";
 import { useInvalidateWorkspace, useMeetings } from "@/lib/queries";
+import { setEmailPrefill, setPlanPrefill } from "@/lib/handoff";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/meetings")({
@@ -43,7 +44,11 @@ type Action = MeetingSummary["actions"][number] & { include?: boolean };
 function MeetingsPage() {
   const { user } = useAuth();
   const invalidate = useInvalidateWorkspace();
-  const { data: meetings } = useMeetings();
+  const meetingsQ = useMeetings();
+  const meetings = meetingsQ.data;
+  const navigate = useNavigate();
+  const [approvedIds, setApprovedIds] = useState<string[]>([]);
+  const [approving, setApproving] = useState(false);
   const summarise = useServerFn(summariseMeeting);
 
   const [title, setTitle] = useState("");
@@ -75,29 +80,80 @@ function MeetingsPage() {
     : "";
 
   async function approveActions() {
-    if (!user) return;
+    if (!user) {
+      toast.error("You need to be signed in.");
+      return;
+    }
     const chosen = actions.filter((a) => a.include);
     if (!chosen.length) {
       toast.error("Select at least one action.");
       return;
     }
-    const { error } = await supabase.from("tasks").insert(
-      chosen.map((a) => ({
-        user_id: user.id,
-        title: a.title,
-        description: a.owner ? `Owner: ${a.owner}` : "",
-        deadline: a.deadline ? new Date(`${a.deadline}T09:00:00`).toISOString() : null,
-        duration_minutes: a.durationMinutes || 60,
-        ai_priority: a.priority,
-        source: "meeting",
-      })),
-    );
+    setApproving(true);
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert(
+        chosen.map((a) => ({
+          user_id: user.id,
+          title: a.title,
+          description: a.owner ? `Owner: ${a.owner}` : "",
+          deadline: a.deadline ? new Date(`${a.deadline}T09:00:00`).toISOString() : null,
+          duration_minutes: a.durationMinutes || 60,
+          ai_priority: a.priority,
+          source: "meeting",
+        })),
+      )
+      .select("id");
+    setApproving(false);
     if (error) {
       toast.error("Could not add the tasks", { description: error.message });
       return;
     }
+    const ids = (data ?? []).map((r) => r.id);
+    setApprovedIds(ids);
     invalidate();
-    toast.success(`${chosen.length} action${chosen.length > 1 ? "s" : ""} added to your Task Library`);
+    toast.success(`${chosen.length} action${chosen.length > 1 ? "s" : ""} added to your Task Library`, {
+      description: "Plan them into your day or turn them into a follow-up email.",
+      action: {
+        label: "Undo",
+        onClick: () => {
+          void (async () => {
+            const { error: undoError } = await supabase.from("tasks").delete().in("id", ids);
+            if (undoError) {
+              toast.error("Could not undo", { description: undoError.message });
+              return;
+            }
+            setApprovedIds([]);
+            invalidate();
+            toast("Approved actions removed again");
+          })();
+        },
+      },
+    });
+  }
+
+  function planApproved() {
+    if (!approvedIds.length) return;
+    setPlanPrefill({ taskIds: approvedIds, label: summary?.title ?? "Meeting actions" });
+    void navigate({ to: "/plan" });
+  }
+
+  function draftFollowUp() {
+    if (!summary) return;
+    const chosen = actions.filter((a) => a.include);
+    setEmailPrefill({
+      audience: "Meeting attendees",
+      objective: `Send a follow-up after "${summary.title}" confirming decisions and next steps`,
+      context: summary.summary,
+      keyPoints: [
+        ...summary.decisions.map((d) => `Decision: ${d}`),
+        ...(chosen.length ? chosen : actions).map(
+          (a) => `Action: ${a.title}${a.owner ? ` (${a.owner})` : ""}${a.deadline ? ` by ${a.deadline}` : ""}`,
+        ),
+      ].join("\n"),
+      tone: "Professional",
+    });
+    void navigate({ to: "/email" });
   }
 
   const sections = summary
@@ -138,7 +194,16 @@ function MeetingsPage() {
         </div>
 
         <div className="space-y-6">
-          {!summary ? (
+          {run.isPending ? (
+            <div className="panel space-y-3 p-5" aria-live="polite">
+              <p className="text-sm text-muted-foreground">AURA is reading your notes…</p>
+              <LoadingLines rows={6} />
+            </div>
+          ) : run.error ? (
+            <div className="panel p-5">
+              <ErrorState message={(run.error as Error).message} onRetry={() => run.mutate()} />
+            </div>
+          ) : !summary ? (
             <div className="panel p-5">
               <EmptyState
                 icon={FileText}
@@ -194,16 +259,40 @@ function MeetingsPage() {
                     </li>
                   ))}
                 </ul>
-                <Button onClick={() => void approveActions()}>
-                  <Check className="mr-2 size-4" /> Approve selected actions
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={approving} onClick={() => void approveActions()}>
+                    {approving ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Check className="mr-2 size-4" />
+                    )}
+                    Approve selected actions
+                  </Button>
+                  <Button variant="outline" disabled={!approvedIds.length} onClick={planApproved}>
+                    <CalendarCheck className="mr-2 size-4" /> Plan approved tasks
+                  </Button>
+                  <Button variant="outline" onClick={draftFollowUp}>
+                    <Mail className="mr-2 size-4" /> Draft follow-up email
+                  </Button>
+                </div>
               </div>
             </>
           )}
 
-          {meetings && meetings.length > 0 ? (
-            <div className="panel space-y-2 p-5">
-              <h3 className="text-base font-semibold">Recent meetings</h3>
+          <div className="panel space-y-2 p-5">
+            <h3 className="text-base font-semibold">Recent meetings</h3>
+            {meetingsQ.isLoading ? (
+              <LoadingLines rows={3} />
+            ) : meetingsQ.error ? (
+              <ErrorState
+                message={(meetingsQ.error as Error).message}
+                onRetry={() => void meetingsQ.refetch()}
+              />
+            ) : !meetings || meetings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Summarised meetings will be listed here for quick reference.
+              </p>
+            ) : (
               <ul className="text-sm text-muted-foreground">
                 {meetings.slice(0, 5).map((m) => (
                   <li key={m.id} className="flex justify-between gap-3 border-b border-border py-2 last:border-0">
@@ -212,8 +301,8 @@ function MeetingsPage() {
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            )}
+          </div>
         </div>
       </div>
     </AppLayout>
