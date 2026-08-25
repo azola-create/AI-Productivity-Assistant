@@ -15,7 +15,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useTaskMutations } from "@/lib/queries";
-import type { Task } from "@/lib/types";
+import type { Priority, Task } from "@/lib/types";
 
 const emptyTask = {
   title: "",
@@ -58,9 +58,12 @@ export function TaskDialog({
   }, [open, task]);
 
   async function save() {
-    if (!form.title.trim()) return toast.error("Give the task a title.");
+    if (!form.title.trim()) {
+      toast.error("Give the task a title.");
+      return;
+    }
     if (!user) return;
-    const priority =
+    const priority: Priority =
       form.urgency + form.importance >= 8 ? "high" : form.urgency + form.importance <= 4 ? "low" : "medium";
     const payload = {
       title: form.title.trim(),
@@ -140,7 +143,7 @@ export function TaskDialog({
                 max={5}
                 step={1}
                 value={[form.urgency]}
-                onValueChange={([v]) => setForm({ ...form, urgency: v })}
+                onValueChange={([v]) => setForm({ ...form, urgency: v ?? form.urgency })}
               />
             </div>
             <div className="space-y-2">
@@ -151,7 +154,7 @@ export function TaskDialog({
                 max={5}
                 step={1}
                 value={[form.importance]}
-                onValueChange={([v]) => setForm({ ...form, importance: v })}
+                onValueChange={([v]) => setForm({ ...form, importance: v ?? form.importance })}
               />
             </div>
           </div>

@@ -166,7 +166,10 @@ function Dashboard() {
       end_at: combine(key, insight.end).toISOString(),
       rationale: insight.recommendation,
     });
-    if (error) return toast.error("Could not add the focus block", { description: error.message });
+    if (error) {
+      toast.error("Could not add the focus block", { description: error.message });
+      return;
+    }
     invalidate();
     toast.success("Focus block added to today's plan", {
       action: { label: "Open plan", onClick: () => void navigate({ to: "/plan" }) },
