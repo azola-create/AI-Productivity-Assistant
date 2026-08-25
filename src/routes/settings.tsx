@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarClock, Loader2, Save } from "lucide-react";
+import { CalendarDays, Loader2, Mail, Moon, Save, Sun } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -104,32 +105,70 @@ function SettingsPage() {
         </div>
 
         <div className="space-y-6">
-          <div className="panel space-y-3 p-5">
-            <h2 className="text-lg font-semibold">Appearance</h2>
-            <p className="text-sm text-muted-foreground">Choose the theme that suits your workspace.</p>
-            <div className="flex gap-2">
-              <Button variant={theme === "light" ? "default" : "outline"} onClick={() => theme !== "light" && toggle()}>
-                Light
-              </Button>
-              <Button variant={theme === "dark" ? "default" : "outline"} onClick={() => theme !== "dark" && toggle()}>
-                Dark
-              </Button>
+          <div className="panel space-y-4 p-5">
+            <div>
+              <h2 className="text-lg font-semibold">Appearance</h2>
+              <p className="text-sm text-muted-foreground">Choose the theme that suits your workspace.</p>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+              <span className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  {theme === "dark" ? <Moon className="size-4" aria-hidden /> : <Sun className="size-4" aria-hidden />}
+                </span>
+                <span>
+                  <span className="block text-sm font-medium">Dark mode</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {theme === "dark" ? "Low-light interface enabled" : "Bright, daylight interface"}
+                  </span>
+                </span>
+              </span>
+              <Switch
+                checked={theme === "dark"}
+                onCheckedChange={() => toggle()}
+                aria-label="Toggle dark mode"
+              />
             </div>
           </div>
 
-          <div className="panel space-y-3 p-5">
-            <h2 className="text-lg font-semibold">Integrations</h2>
-            <p className="text-sm text-muted-foreground">
-              Calendar sync will let AURA plan around meetings you already have.
-            </p>
-            <ul className="space-y-2">
-              {["Google Calendar", "Microsoft Outlook"].map((name) => (
-                <li key={name} className="flex items-center justify-between rounded-lg border border-border p-3">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <CalendarClock className="size-4 text-muted-foreground" aria-hidden />
-                    {name}
+          <div className="panel space-y-4 p-5">
+            <div>
+              <h2 className="text-lg font-semibold">Integrations</h2>
+              <p className="text-sm text-muted-foreground">
+                Calendar and inbox sync will let AURA plan around the commitments you already have.
+              </p>
+            </div>
+            <ul className="space-y-3">
+              {[
+                {
+                  name: "Google Calendar",
+                  blurb: "Pull events into Plan My Day so focus blocks never clash with meetings.",
+                  Icon: CalendarDays,
+                },
+                {
+                  name: "Microsoft Outlook",
+                  blurb: "Send drafted follow-up emails straight from your work mailbox.",
+                  Icon: Mail,
+                },
+              ].map(({ name, blurb, Icon }) => (
+                <li
+                  key={name}
+                  className="flex flex-col gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="flex items-start gap-3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
+                      <Icon className="size-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{name}</span>
+                        <StatusBadge tone="muted">Coming soon</StatusBadge>
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{blurb}</span>
+                    </span>
                   </span>
-                  <StatusBadge tone="muted">Coming soon</StatusBadge>
+                  <Button variant="outline" size="sm" disabled className="shrink-0 sm:self-center">
+                    Connect
+                  </Button>
                 </li>
               ))}
             </ul>
