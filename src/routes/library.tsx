@@ -103,6 +103,7 @@ function LibraryPage() {
           <ErrorState message={(error as Error).message} onRetry={() => void refetch()} />
         ) : filtered.length === 0 ? (
           <EmptyState
+            icon={Search}
             title="No tasks match"
             description="Adjust the filters, or add a task to get started."
           />
@@ -123,10 +124,10 @@ function LibraryPage() {
                     {t.duration_minutes} min
                   </span>
                 </button>
-                <StatusBadge tone={t.ai_priority === "high" ? "danger" : t.ai_priority === "low" ? "muted" : "warning"}>
+                <StatusBadge tone={t.ai_priority === "high" ? "risk" : t.ai_priority === "low" ? "muted" : "focus"}>
                   {t.ai_priority}
                 </StatusBadge>
-                <StatusBadge tone={t.status === "completed" ? "success" : "info"}>{t.status}</StatusBadge>
+                <StatusBadge tone={t.status === "completed" ? "done" : "primary"}>{t.status}</StatusBadge>
                 {t.status !== "completed" && (
                   <Button
                     size="icon"
