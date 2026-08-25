@@ -136,13 +136,19 @@ function PlanPage() {
 
   async function patchBlock(id: string, patch: Partial<PlanBlock>) {
     const { error } = await supabase.from("plan_blocks").update(patch).eq("id", id);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     invalidate();
   }
 
   async function removeBlock(b: PlanBlock) {
     const { error } = await supabase.from("plan_blocks").delete().eq("id", b.id);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     invalidate();
     toast("Block removed", {
       action: {
