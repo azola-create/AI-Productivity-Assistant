@@ -15,6 +15,7 @@ import { Route as EmailRouteImport } from './routes/email'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as MeetingsRouteImport } from './routes/meetings'
 import { Route as PlanRouteImport } from './routes/plan'
+import { Route as ResearchRouteImport } from './routes/research'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +47,11 @@ const PlanRoute = PlanRouteImport.update({
   path: '/plan',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResearchRoute = ResearchRouteImport.update({
+  id: '/research',
+  path: '/research',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/library': typeof LibraryRoute
   '/meetings': typeof MeetingsRoute
   '/plan': typeof PlanRoute
+  '/research': typeof ResearchRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/library': typeof LibraryRoute
   '/meetings': typeof MeetingsRoute
   '/plan': typeof PlanRoute
+  '/research': typeof ResearchRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,13 +79,24 @@ export interface FileRoutesById {
   '/library': typeof LibraryRoute
   '/meetings': typeof MeetingsRoute
   '/plan': typeof PlanRoute
+  '/research': typeof ResearchRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/email' | '/library' | '/meetings' | '/plan'
+  fullPaths:
+    '/' | '/auth' | '/email' | '/library' | '/meetings' | '/plan' | '/research'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/email' | '/library' | '/meetings' | '/plan'
-  id: '__root__' | '/' | '/auth' | '/email' | '/library' | '/meetings' | '/plan'
+  to:
+    '/' | '/auth' | '/email' | '/library' | '/meetings' | '/plan' | '/research'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/email'
+    | '/library'
+    | '/meetings'
+    | '/plan'
+    | '/research'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -87,6 +106,7 @@ export interface RootRouteChildren {
   LibraryRoute: typeof LibraryRoute
   MeetingsRoute: typeof MeetingsRoute
   PlanRoute: typeof PlanRoute
+  ResearchRoute: typeof ResearchRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -133,6 +153,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlanRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/research': {
+      id: '/research'
+      path: '/research'
+      fullPath: '/research'
+      preLoaderRoute: typeof ResearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -143,6 +170,7 @@ const rootRouteChildren: RootRouteChildren = {
   LibraryRoute: LibraryRoute,
   MeetingsRoute: MeetingsRoute,
   PlanRoute: PlanRoute,
+  ResearchRoute: ResearchRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
