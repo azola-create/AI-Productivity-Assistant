@@ -66,7 +66,7 @@ function EmailPage() {
           user_id: user.id,
           subject: result.subject,
           body: `${result.greeting}\n\n${result.body}\n\n${result.callToAction}\n\n${result.signature}`,
-          inputs: form as unknown as Record<string, unknown>,
+          inputs: form as unknown as never,
         });
         invalidate();
       }

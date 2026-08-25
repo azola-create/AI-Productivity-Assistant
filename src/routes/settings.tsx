@@ -28,7 +28,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { user, profile, refreshProfile } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, toggle } = useTheme();
   const [form, setForm] = useState({ full_name: "", job_title: "", work_start: "08:30", work_end: "17:00" });
   const [saving, setSaving] = useState(false);
 
@@ -108,10 +108,10 @@ function SettingsPage() {
             <h2 className="text-lg font-semibold">Appearance</h2>
             <p className="text-sm text-muted-foreground">Choose the theme that suits your workspace.</p>
             <div className="flex gap-2">
-              <Button variant={theme === "light" ? "default" : "outline"} onClick={() => setTheme("light")}>
+              <Button variant={theme === "light" ? "default" : "outline"} onClick={() => theme !== "light" && toggle()}>
                 Light
               </Button>
-              <Button variant={theme === "dark" ? "default" : "outline"} onClick={() => setTheme("dark")}>
+              <Button variant={theme === "dark" ? "default" : "outline"} onClick={() => theme !== "dark" && toggle()}>
                 Dark
               </Button>
             </div>

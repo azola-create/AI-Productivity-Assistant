@@ -62,7 +62,7 @@ function MeetingsPage() {
           user_id: user.id,
           title: title.trim() || result.title,
           raw_notes: notes,
-          summary: result as unknown as Record<string, unknown>,
+          summary: result as unknown as never,
         });
         invalidate();
       }
@@ -177,7 +177,7 @@ function MeetingsPage() {
                     <li key={`${a.title}-${i}`} className="flex items-start gap-3 rounded-lg border border-border p-3">
                       <Checkbox
                         id={`a-${i}`}
-                        checked={a.include}
+                        checked={a.include ?? false}
                         onCheckedChange={(v) =>
                           setActions((prev) => prev.map((x, j) => (j === i ? { ...x, include: v === true } : x)))
                         }

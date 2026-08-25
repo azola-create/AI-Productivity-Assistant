@@ -50,7 +50,7 @@ function ResearchPage() {
           user_id: user.id,
           title: result.title,
           source_text: text.slice(0, 40000),
-          output: result as unknown as Record<string, unknown>,
+          output: result as unknown as never,
         });
         invalidate();
       }
