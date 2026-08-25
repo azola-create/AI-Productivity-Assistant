@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ChatRouteImport } from './routes/chat'
 import { Route as EmailRouteImport } from './routes/email'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as MeetingsRouteImport } from './routes/meetings'
@@ -25,6 +26,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EmailRoute = EmailRouteImport.update({
@@ -56,6 +62,7 @@ const ResearchRoute = ResearchRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/chat': typeof ChatRoute
   '/email': typeof EmailRoute
   '/library': typeof LibraryRoute
   '/meetings': typeof MeetingsRoute
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/chat': typeof ChatRoute
   '/email': typeof EmailRoute
   '/library': typeof LibraryRoute
   '/meetings': typeof MeetingsRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/chat': typeof ChatRoute
   '/email': typeof EmailRoute
   '/library': typeof LibraryRoute
   '/meetings': typeof MeetingsRoute
@@ -84,14 +93,29 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/email' | '/library' | '/meetings' | '/plan' | '/research'
+    | '/'
+    | '/auth'
+    | '/chat'
+    | '/email'
+    | '/library'
+    | '/meetings'
+    | '/plan'
+    | '/research'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/' | '/auth' | '/email' | '/library' | '/meetings' | '/plan' | '/research'
+    | '/'
+    | '/auth'
+    | '/chat'
+    | '/email'
+    | '/library'
+    | '/meetings'
+    | '/plan'
+    | '/research'
   id:
     | '__root__'
     | '/'
     | '/auth'
+    | '/chat'
     | '/email'
     | '/library'
     | '/meetings'
@@ -102,6 +126,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
+  ChatRoute: typeof ChatRoute
   EmailRoute: typeof EmailRoute
   LibraryRoute: typeof LibraryRoute
   MeetingsRoute: typeof MeetingsRoute
@@ -123,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/email': {
@@ -166,6 +198,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
+  ChatRoute: ChatRoute,
   EmailRoute: EmailRoute,
   LibraryRoute: LibraryRoute,
   MeetingsRoute: MeetingsRoute,
