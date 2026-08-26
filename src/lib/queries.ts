@@ -66,6 +66,11 @@ export function useInvalidateWorkspace() {
     void qc.invalidateQueries({ queryKey: ["tasks"] });
     void qc.invalidateQueries({ queryKey: ["plan_blocks"] });
     void qc.invalidateQueries({ queryKey: ["completed_stats"] });
+    void qc.invalidateQueries({ queryKey: ["meetings"] });
+    void qc.invalidateQueries({ queryKey: ["emails"] });
+    void qc.invalidateQueries({ queryKey: ["research"] });
+    void qc.invalidateQueries({ queryKey: ["chats"] });
+    void qc.invalidateQueries({ queryKey: ["chat_messages"] });
   };
 }
 

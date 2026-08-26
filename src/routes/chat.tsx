@@ -6,7 +6,7 @@ import { Loader2, MessageCircle, Plus, Send } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
 import { AiNotice, ReadAloud } from "@/components/ai-output";
-import { EmptyState } from "@/components/states";
+import { EmptyState, ErrorState, LoadingLines } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +21,8 @@ export const Route = createFileRoute("/chat")({
       { name: "description", content: "A calm, professional AI assistant for everyday workplace questions." },
       { property: "og:title", content: "AURA Chat — AURAwork" },
       { property: "og:description", content: "A calm, professional AI assistant for everyday workplace questions." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: ChatPage,
@@ -29,10 +31,12 @@ export const Route = createFileRoute("/chat")({
 function ChatPage() {
   const { user } = useAuth();
   const invalidate = useInvalidateWorkspace();
-  const { data: chats } = useChats();
+  const chatsQ = useChats();
   const [chatId, setChatId] = useState<string | null>(null);
-  const { data: messages } = useChatMessages(chatId);
+  const messagesQ = useChatMessages(chatId);
+  const messages = messagesQ.data;
   const [input, setInput] = useState("");
+  const [lastSent, setLastSent] = useState("");
   const send = useServerFn(auraChat);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +76,7 @@ function ChatPage() {
     const content = input.trim();
     if (!content || ask.isPending) return;
     setInput("");
+    setLastSent(content);
     ask.mutate(content);
   }
 
@@ -95,15 +100,23 @@ function ChatPage() {
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
         <div className="panel hidden space-y-2 p-4 lg:block">
           <h2 className="text-sm font-semibold">Conversations</h2>
-          {(chats ?? []).length === 0 ? (
+          {chatsQ.isLoading ? (
+            <LoadingLines rows={4} />
+          ) : chatsQ.isError ? (
+            <ErrorState
+              message={(chatsQ.error as Error).message || "Conversations could not be loaded."}
+              onRetry={() => void chatsQ.refetch()}
+            />
+          ) : (chatsQ.data ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">No conversations yet.</p>
           ) : (
             <ul className="space-y-1">
-              {(chats ?? []).map((c) => (
+              {(chatsQ.data ?? []).map((c) => (
                 <li key={c.id}>
                   <button
                     onClick={() => setChatId(c.id)}
-                    className={`w-full truncate rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                    aria-current={chatId === c.id ? "true" : undefined}
+                    className={`w-full truncate rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
                       chatId === c.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted"
                     }`}
                   >
@@ -117,7 +130,14 @@ function ChatPage() {
 
         <div className="panel flex min-h-[60vh] flex-col p-5">
           <div className="flex-1 space-y-4 overflow-y-auto">
-            {(messages ?? []).length === 0 ? (
+            {messagesQ.isLoading && chatId ? (
+              <LoadingLines rows={5} />
+            ) : messagesQ.isError ? (
+              <ErrorState
+                message={(messagesQ.error as Error).message || "This conversation could not be loaded."}
+                onRetry={() => void messagesQ.refetch()}
+              />
+            ) : (messages ?? []).length === 0 ? (
               <EmptyState
                 icon={MessageCircle}
                 title="Start a conversation"
@@ -128,9 +148,7 @@ function ChatPage() {
                 <div
                   key={m.id}
                   className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
-                    m.role === "user"
-                      ? "ml-auto bg-primary/10 text-foreground"
-                      : "bg-muted text-foreground"
+                    m.role === "user" ? "ml-auto bg-primary/10 text-foreground" : "bg-muted text-foreground"
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{m.content}</p>
@@ -143,9 +161,15 @@ function ChatPage() {
               ))
             )}
             {ask.isPending ? (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
                 <Loader2 className="size-4 animate-spin" /> AURA is thinking…
               </p>
+            ) : null}
+            {ask.isError && lastSent ? (
+              <ErrorState
+                message={(ask.error as Error).message || "AURA could not reply."}
+                onRetry={() => ask.mutate(lastSent)}
+              />
             ) : null}
             <div ref={endRef} />
           </div>
@@ -166,7 +190,7 @@ function ChatPage() {
                 aria-label="Message AURA"
               />
               <Button onClick={submit} disabled={!input.trim() || ask.isPending} aria-label="Send message">
-                <Send className="size-4" />
+                {ask.isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               </Button>
             </div>
             <AiNotice />

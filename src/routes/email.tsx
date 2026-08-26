@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
-import { Copy, FileDown, Loader2, Mail, Maximize2, Minimize2, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Copy, FileDown, Loader2, Mail, Maximize2, Minimize2, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
 import { AiNotice, ReadAloud } from "@/components/ai-output";
-import { EmptyState } from "@/components/states";
+import { EmptyState, ErrorState, LoadingLines } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { draftEmail, type EmailDraft } from "@/lib/ai.functions";
 import { exportDocx, exportPdf } from "@/lib/export";
+import { takeEmailPrefill } from "@/lib/handoff";
 import { useInvalidateWorkspace } from "@/lib/queries";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -28,12 +29,17 @@ export const Route = createFileRoute("/email")({
         property: "og:description",
         content: "Draft professional workplace email with tone, audience and length controls.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: EmailPage,
 });
 
 const TONES = ["Professional", "Friendly", "Direct", "Diplomatic", "Formal"];
+
+const draftToText = (d: EmailDraft) =>
+  [d.greeting, d.body, d.callToAction, d.signature].filter((p) => p && p.trim()).join("\n\n");
 
 function EmailPage() {
   const { user, profile } = useAuth();
@@ -48,6 +54,19 @@ function EmailPage() {
     tone: "Professional",
   });
   const [draft, setDraft] = useState<EmailDraft | null>(null);
+  const previous = useRef<EmailDraft | null>(null);
+
+  // Prefill from a reviewed meeting hand-off.
+  useEffect(() => {
+    const prefill = takeEmailPrefill();
+    if (!prefill) return;
+    setForm((f) => ({ ...f, ...prefill, tone: prefill.tone ?? f.tone }));
+    toast("Meeting context loaded", { description: "Review the inputs, then draft the follow-up." });
+  }, []);
+
+  function restore(snapshot: EmailDraft | null) {
+    setDraft(snapshot);
+  }
 
   const run = useMutation({
     mutationFn: async (mode: "generate" | "shorten" | "expand") =>
@@ -56,27 +75,50 @@ function EmailPage() {
           ...form,
           senderName: profile?.full_name ?? "",
           mode,
-          existing: draft ? `${draft.greeting}\n\n${draft.body}\n\n${draft.callToAction}` : "",
+          existing: draft ? draftToText(draft) : "",
         },
       }),
-    onSuccess: async (result) => {
+    onMutate: () => {
+      previous.current = draft;
+    },
+    onSuccess: async (result, mode) => {
+      const snapshot = previous.current;
       setDraft(result);
+      if (mode === "generate") {
+        toast.success("Draft ready", { description: "Edit anything before you send." });
+      } else {
+        toast.success(mode === "shorten" ? "Draft shortened" : "Draft expanded", {
+          description: "You can undo this change.",
+          action: snapshot
+            ? {
+                label: "Undo",
+                onClick: () => {
+                  restore(snapshot);
+                  toast("Previous draft restored");
+                },
+              }
+            : undefined,
+        });
+      }
       if (user) {
-        await supabase.from("emails").insert({
+        const { error } = await supabase.from("emails").insert({
           user_id: user.id,
           subject: result.subject,
-          body: `${result.greeting}\n\n${result.body}\n\n${result.callToAction}\n\n${result.signature}`,
+          body: draftToText(result),
           inputs: form as unknown as never,
         });
+        if (error) {
+          toast.error("Draft not saved to your workspace", { description: error.message });
+          return;
+        }
         invalidate();
       }
     },
     onError: (e: Error) => toast.error("Could not draft the email", { description: e.message }),
   });
 
-  const fullText = draft
-    ? `Subject: ${draft.subject}\n\n${draft.greeting}\n\n${draft.body}\n\n${draft.callToAction}\n\n${draft.signature}`
-    : "";
+  const fullText = draft ? `Subject: ${draft.subject}\n\n${draftToText(draft)}` : "";
+  const canGenerate = Boolean(form.audience.trim() && form.objective.trim());
 
   return (
     <AppLayout
@@ -139,21 +181,35 @@ function EmailPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            disabled={!form.audience.trim() || !form.objective.trim() || run.isPending}
-            onClick={() => run.mutate("generate")}
-          >
+          <Button disabled={!canGenerate || run.isPending} onClick={() => run.mutate("generate")}>
             {run.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
-            Draft email
+            {run.isPending ? "Drafting…" : "Draft email"}
           </Button>
         </div>
 
         <div className="panel space-y-4 p-5">
-          {!draft ? (
+          {run.isPending && !draft ? (
+            <div className="space-y-3">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> AURA is drafting your email…
+              </p>
+              <LoadingLines rows={6} />
+            </div>
+          ) : run.isError && !draft ? (
+            <ErrorState
+              message={(run.error as Error).message || "The draft could not be generated."}
+              onRetry={() => run.mutate("generate")}
+            />
+          ) : !draft ? (
             <EmptyState
               icon={Mail}
               title="No draft yet"
               description="Fill in the audience and objective, then let AURA write the first version."
+              action={
+                <Button disabled={!canGenerate} onClick={() => run.mutate("generate")}>
+                  <Sparkles className="mr-2 size-4" /> Draft email
+                </Button>
+              }
             />
           ) : (
             <>
@@ -167,6 +223,18 @@ function EmailPage() {
                   <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate("expand")}>
                     <Maximize2 className="mr-2 size-4" /> Expand
                   </Button>
+                  {previous.current ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        restore(previous.current);
+                        toast("Previous draft restored");
+                      }}
+                    >
+                      <Undo2 className="mr-2 size-4" /> Undo change
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="outline"
@@ -180,23 +248,32 @@ function EmailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      void exportPdf(draft.subject || "Email draft", [{ body: fullText }])
-                    }
+                    onClick={() => void exportPdf(draft.subject || "Email draft", [{ body: fullText }])}
                   >
                     <FileDown className="mr-2 size-4" /> PDF
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      void exportDocx(draft.subject || "Email draft", [{ body: fullText }])
-                    }
+                    onClick={() => void exportDocx(draft.subject || "Email draft", [{ body: fullText }])}
                   >
                     <FileDown className="mr-2 size-4" /> Word
                   </Button>
                 </div>
               </div>
+
+              {run.isPending ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
+                  <Loader2 className="size-4 animate-spin" /> Rewriting the draft…
+                </p>
+              ) : null}
+              {run.isError ? (
+                <ErrorState
+                  message={(run.error as Error).message || "That rewrite failed."}
+                  onRetry={() => run.mutate("generate")}
+                />
+              ) : null}
+
               <div className="space-y-1.5">
                 <Label htmlFor="e-subject">Subject</Label>
                 <Input
@@ -210,7 +287,7 @@ function EmailPage() {
                 <Textarea
                   id="e-body"
                   rows={16}
-                  value={`${draft.greeting}\n\n${draft.body}\n\n${draft.callToAction}\n\n${draft.signature}`}
+                  value={draftToText(draft)}
                   onChange={(e) =>
                     setDraft({ ...draft, greeting: "", body: e.target.value, callToAction: "", signature: "" })
                   }

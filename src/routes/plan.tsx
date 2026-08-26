@@ -15,12 +15,12 @@ import {
   Trash2,
   Volume2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
 import { AiNotice, ReadAloud } from "@/components/ai-output";
 import { FocusSession } from "@/components/focus-session";
-import { EmptyState, LoadingLines } from "@/components/states";
+import { EmptyState, ErrorState, LoadingLines } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { TaskDialog } from "@/components/task-dialog";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { generateDayPlan } from "@/lib/ai.functions";
 import { combine, dayKey, formatDuration, hhmm, minutesBetween, priorityScore } from "@/lib/format";
 import { exportDocx, exportPdf } from "@/lib/export";
+import { takePlanPrefill } from "@/lib/handoff";
 import { usePlanBlocks, useTaskMutations, useTasks } from "@/lib/queries";
 import { supabase } from "@/integrations/supabase/client";
 import type { PlanBlock, Task } from "@/lib/types";
@@ -80,6 +81,8 @@ function PlanPage() {
   const [explanation, setExplanation] = useState("");
   const [tomorrowOpen, setTomorrowOpen] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+  const [prefill, setPrefill] = useState<{ taskIds: string[]; label: string } | null>(null);
+  const prefillDone = useRef(false);
 
   const run = useServerFn(generateDayPlan);
   const tasks = tasksQ.data ?? [];
@@ -129,10 +132,27 @@ function PlanPage() {
       if (ids.length) await supabase.from("tasks").update({ status: "planned" }).in("id", ids);
       setExplanation(plan.explanation);
       invalidate();
-      toast.success("Plan ready", { description: "Every block is editable." });
+      toast.success(`Plan ready — ${plan.blocks.length} blocks scheduled`, {
+        description: "Every block is editable.",
+      });
     },
     onError: (e: Error) => toast.error("Could not build the plan", { description: e.message }),
   });
+
+  // Approved meeting actions hand off task ids; schedule them as soon as tasks load.
+  useEffect(() => {
+    const p = takePlanPrefill();
+    if (p && p.taskIds.length) setPrefill(p);
+  }, []);
+
+  useEffect(() => {
+    if (!prefill || prefillDone.current || tasksQ.isLoading) return;
+    const subset = tasks.filter((t) => prefill.taskIds.includes(t.id));
+    if (subset.length === 0) return;
+    prefillDone.current = true;
+    toast("Scheduling approved actions", { description: prefill.label });
+    planM.mutate(subset);
+  }, [prefill, tasks, tasksQ.isLoading]);
 
   async function patchBlock(id: string, patch: Partial<PlanBlock>) {
     const { error } = await supabase.from("plan_blocks").update(patch).eq("id", id);
@@ -304,7 +324,24 @@ function PlanPage() {
 
           <div className="mt-4">
             {blocksQ.isLoading || planM.isPending ? (
-              <LoadingLines rows={5} />
+              <div className="space-y-3">
+                {planM.isPending ? (
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
+                    <Loader2 className="h-4 w-4 animate-spin" /> AURA is building your time blocks…
+                  </p>
+                ) : null}
+                <LoadingLines rows={5} />
+              </div>
+            ) : blocksQ.isError ? (
+              <ErrorState
+                message={(blocksQ.error as Error).message || "Your plan could not be loaded."}
+                onRetry={() => void blocksQ.refetch()}
+              />
+            ) : planM.isError ? (
+              <ErrorState
+                message={(planM.error as Error).message || "The plan could not be generated."}
+                onRetry={() => planM.mutate(undefined)}
+              />
             ) : blocks.length === 0 ? (
               <EmptyState
                 icon={CalendarCheck}
