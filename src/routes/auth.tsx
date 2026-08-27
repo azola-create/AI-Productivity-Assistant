@@ -40,12 +40,34 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading && user) void navigate({ to: "/" });
   }, [user, loading, navigate]);
+
+  async function sendRecovery() {
+    if (!email.trim()) {
+      setError("Enter your work email first, then choose “Forgot password?”.");
+      return;
+    }
+    setError(null);
+    setRecovering(true);
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setRecovering(false);
+    if (err) {
+      toast.error("Could not send the recovery email", {
+        description: err.message,
+        action: { label: "Retry", onClick: () => void sendRecovery() },
+      });
+      return;
+    }
+    toast.success("Recovery email sent", { description: `Check ${email.trim()} for the reset link.` });
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -151,7 +173,19 @@ function AuthPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {mode === "signin" && (
+                  <button
+                    type="button"
+                    className="rounded text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => void sendRecovery()}
+                    disabled={recovering}
+                  >
+                    {recovering ? "Sending…" : "Forgot password?"}
+                  </button>
+                )}
+              </div>
               <Input
                 id="password"
                 type="password"

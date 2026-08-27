@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarDays, Loader2, Mail, Moon, Save, Sun } from "lucide-react";
+import { CalendarDays, KeyRound, Loader2, Mail, Moon, Save, Sun } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -32,6 +32,52 @@ function SettingsPage() {
   const { theme, toggle } = useTheme();
   const [form, setForm] = useState({ full_name: "", job_title: "", work_start: "08:30", work_end: "17:00" });
   const [saving, setSaving] = useState(false);
+  const [pw, setPw] = useState({ next: "", confirm: "" });
+  const [updatingPw, setUpdatingPw] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+
+  async function updatePassword() {
+    if (pw.next.length < 8) {
+      toast.error("Use at least 8 characters for your new password.");
+      return;
+    }
+    if (pw.next !== pw.confirm) {
+      toast.error("The two passwords do not match.");
+      return;
+    }
+    setUpdatingPw(true);
+    const { error } = await supabase.auth.updateUser({ password: pw.next });
+    setUpdatingPw(false);
+    if (error) {
+      toast.error("Could not update your password", {
+        description: error.message,
+        action: { label: "Retry", onClick: () => void updatePassword() },
+      });
+      return;
+    }
+    setPw({ next: "", confirm: "" });
+    toast.success("Password updated");
+  }
+
+  async function sendResetLink() {
+    if (!user?.email) {
+      toast.error("No email address on this account.");
+      return;
+    }
+    setSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSendingReset(false);
+    if (error) {
+      toast.error("Could not send the recovery email", {
+        description: error.message,
+        action: { label: "Retry", onClick: () => void sendResetLink() },
+      });
+      return;
+    }
+    toast.success("Recovery email sent", { description: `Check ${user.email} for the reset link.` });
+  }
 
   useEffect(() => {
     if (profile) {
@@ -105,6 +151,53 @@ function SettingsPage() {
         </div>
 
         <div className="space-y-6">
+          <div className="panel space-y-4 p-5">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <KeyRound className="size-4" aria-hidden />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold">Password &amp; security</h2>
+                <p className="text-sm text-muted-foreground">Change your password, or email yourself a reset link.</p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="s-pw">New password</Label>
+                <Input
+                  id="s-pw"
+                  type="password"
+                  autoComplete="new-password"
+                  value={pw.next}
+                  onChange={(e) => setPw({ ...pw, next: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="s-pw2">Confirm password</Label>
+                <Input
+                  id="s-pw2"
+                  type="password"
+                  autoComplete="new-password"
+                  value={pw.confirm}
+                  onChange={(e) => setPw({ ...pw, confirm: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void updatePassword()} disabled={updatingPw}>
+                {updatingPw ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                Update password
+              </Button>
+              <Button variant="outline" onClick={() => void sendResetLink()} disabled={sendingReset}>
+                {sendingReset ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                Email me a reset link
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Forgot your password? The reset link opens a secure page where you can choose a new one.
+            </p>
+          </div>
+
           <div className="panel space-y-4 p-5">
             <div>
               <h2 className="text-lg font-semibold">Appearance</h2>

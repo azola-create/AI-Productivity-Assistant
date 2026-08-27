@@ -27,7 +27,7 @@ export const Route = createFileRoute("/library")({
 
 function LibraryPage() {
   const { data: tasks, isLoading, error, refetch } = useTasks();
-  const { update, remove } = useTaskMutations();
+  const { update, remove, create } = useTaskMutations();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [priority, setPriority] = useState("all");
@@ -43,6 +43,55 @@ function LibraryPage() {
       return `${t.title} ${t.description} ${t.notes}`.toLowerCase().includes(q);
     });
   }, [tasks, query, status, priority]);
+
+  async function completeTask(t: Task) {
+    const previous = { status: t.status, completed_at: t.completed_at };
+    try {
+      await update.mutateAsync({
+        id: t.id,
+        patch: { status: "completed", completed_at: new Date().toISOString() },
+      });
+      toast.success("Task completed", {
+        description: t.title,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void update.mutateAsync({ id: t.id, patch: previous }).catch((err: unknown) => {
+              toast.error("Could not undo", { description: (err as Error).message });
+            });
+          },
+        },
+      });
+    } catch (err) {
+      toast.error("Could not complete this task", {
+        description: (err as Error).message,
+        action: { label: "Retry", onClick: () => void completeTask(t) },
+      });
+    }
+  }
+
+  async function deleteTask(t: Task) {
+    try {
+      await remove.mutateAsync(t.id);
+      toast("Task deleted", {
+        description: t.title,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            const { created_at: _c, updated_at: _u, ...restore } = t;
+            void create.mutateAsync(restore).catch((err: unknown) => {
+              toast.error("Could not restore the task", { description: (err as Error).message });
+            });
+          },
+        },
+      });
+    } catch (err) {
+      toast.error("Could not delete this task", {
+        description: (err as Error).message,
+        action: { label: "Retry", onClick: () => void deleteTask(t) },
+      });
+    }
+  }
 
   return (
     <AppLayout
@@ -132,14 +181,9 @@ function LibraryPage() {
                   <Button
                     size="icon"
                     variant="ghost"
+                    disabled={update.isPending}
                     aria-label={`Mark ${t.title} complete`}
-                    onClick={async () => {
-                      await update.mutateAsync({
-                        id: t.id,
-                        patch: { status: "completed", completed_at: new Date().toISOString() },
-                      });
-                      toast.success("Task completed", { description: t.title });
-                    }}
+                    onClick={() => void completeTask(t)}
                   >
                     <CheckCircle2 className="size-4" />
                   </Button>
@@ -147,11 +191,9 @@ function LibraryPage() {
                 <Button
                   size="icon"
                   variant="ghost"
+                  disabled={remove.isPending}
                   aria-label={`Delete ${t.title}`}
-                  onClick={async () => {
-                    await remove.mutateAsync(t.id);
-                    toast("Task deleted", { description: t.title });
-                  }}
+                  onClick={() => void deleteTask(t)}
                 >
                   <Trash2 className="size-4" />
                 </Button>
