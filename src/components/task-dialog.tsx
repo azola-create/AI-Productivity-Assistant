@@ -75,14 +75,21 @@ export function TaskDialog({
       importance: form.importance,
       ai_priority: priority,
     };
-    if (task) {
-      await update.mutateAsync({ id: task.id, patch: payload });
-      toast.success("Task updated");
-    } else {
-      await create.mutateAsync({ ...payload, user_id: user.id });
-      toast.success("Task added to your library");
+    try {
+      if (task) {
+        await update.mutateAsync({ id: task.id, patch: payload });
+        toast.success("Task updated");
+      } else {
+        await create.mutateAsync({ ...payload, user_id: user.id });
+        toast.success("Task added to your library");
+      }
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(task ? "Could not save your changes" : "Could not add the task", {
+        description: (err as Error).message,
+        action: { label: "Retry", onClick: () => void save() },
+      });
     }
-    onOpenChange(false);
   }
 
   return (
