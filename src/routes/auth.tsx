@@ -151,7 +151,19 @@ function AuthPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {mode === "signin" && (
+                  <button
+                    type="button"
+                    className="rounded text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => void sendRecovery()}
+                    disabled={recovering}
+                  >
+                    {recovering ? "Sending…" : "Forgot password?"}
+                  </button>
+                )}
+              </div>
               <Input
                 id="password"
                 type="password"
