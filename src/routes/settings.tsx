@@ -236,36 +236,71 @@ function SettingsPage() {
                   name: "Google Calendar",
                   blurb: "Pull events into Plan My Day so focus blocks never clash with meetings.",
                   Icon: CalendarDays,
+                  points: [
+                    "Read-only access to your events",
+                    "Focus blocks scheduled around real meetings",
+                    "Travel and buffer time respected",
+                  ],
                 },
                 {
                   name: "Microsoft Outlook",
                   blurb: "Send drafted follow-up emails straight from your work mailbox.",
                   Icon: Mail,
+                  points: [
+                    "Send follow-ups from your own address",
+                    "Outlook calendar merged into your day plan",
+                    "Drafts saved to your mailbox before sending",
+                  ],
                 },
-              ].map(({ name, blurb, Icon }) => (
+              ].map(({ name, blurb, Icon, points }) => (
                 <li
                   key={name}
-                  className="flex flex-col gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  className="rounded-lg border border-dashed border-border bg-muted/30 p-4"
                 >
-                  <span className="flex items-start gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
-                      <Icon className="size-4" aria-hidden />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium">{name}</span>
-                        <StatusBadge tone="muted">Coming soon</StatusBadge>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <span className="flex items-start gap-3">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
+                        <Icon className="size-4" aria-hidden />
                       </span>
-                      <span className="mt-1 block text-xs text-muted-foreground">{blurb}</span>
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium">{name}</span>
+                          <StatusBadge tone="muted">Coming soon</StatusBadge>
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">{blurb}</span>
+                      </span>
                     </span>
-                  </span>
-                  <Button variant="outline" size="sm" disabled className="shrink-0 sm:self-center">
-                    Connect
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 sm:self-center"
+                      onClick={() =>
+                        toast.success(`We'll let you know when ${name} sync is ready`, {
+                          description: user?.email
+                            ? `Notification will go to ${user.email}.`
+                            : undefined,
+                        })
+                      }
+                    >
+                      Notify me
+                    </Button>
+                  </div>
+                  <ul className="mt-3 space-y-1.5 pl-12">
+                    {points.map((point) => (
+                      <li key={point} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <Check className="mt-0.5 size-3 shrink-0 text-primary" aria-hidden />
+                        <span>{point}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>
+            <p className="text-xs text-muted-foreground">
+              Sync will be read-only at launch — AURA reads your commitments and never changes them without asking.
+            </p>
           </div>
+
         </div>
       </div>
     </AppLayout>
