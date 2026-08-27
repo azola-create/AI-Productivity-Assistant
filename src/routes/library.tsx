@@ -132,14 +132,9 @@ function LibraryPage() {
                   <Button
                     size="icon"
                     variant="ghost"
+                    disabled={update.isPending}
                     aria-label={`Mark ${t.title} complete`}
-                    onClick={async () => {
-                      await update.mutateAsync({
-                        id: t.id,
-                        patch: { status: "completed", completed_at: new Date().toISOString() },
-                      });
-                      toast.success("Task completed", { description: t.title });
-                    }}
+                    onClick={() => void completeTask(t)}
                   >
                     <CheckCircle2 className="size-4" />
                   </Button>
@@ -147,11 +142,9 @@ function LibraryPage() {
                 <Button
                   size="icon"
                   variant="ghost"
+                  disabled={remove.isPending}
                   aria-label={`Delete ${t.title}`}
-                  onClick={async () => {
-                    await remove.mutateAsync(t.id);
-                    toast("Task deleted", { description: t.title });
-                  }}
+                  onClick={() => void deleteTask(t)}
                 >
                   <Trash2 className="size-4" />
                 </Button>
