@@ -48,6 +48,27 @@ function AuthPage() {
     if (!loading && user) void navigate({ to: "/" });
   }, [user, loading, navigate]);
 
+  async function sendRecovery() {
+    if (!email.trim()) {
+      setError("Enter your work email first, then choose “Forgot password?”.");
+      return;
+    }
+    setError(null);
+    setRecovering(true);
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setRecovering(false);
+    if (err) {
+      toast.error("Could not send the recovery email", {
+        description: err.message,
+        action: { label: "Retry", onClick: () => void sendRecovery() },
+      });
+      return;
+    }
+    toast.success("Recovery email sent", { description: `Check ${email.trim()} for the reset link.` });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
