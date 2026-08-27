@@ -32,6 +32,52 @@ function SettingsPage() {
   const { theme, toggle } = useTheme();
   const [form, setForm] = useState({ full_name: "", job_title: "", work_start: "08:30", work_end: "17:00" });
   const [saving, setSaving] = useState(false);
+  const [pw, setPw] = useState({ next: "", confirm: "" });
+  const [updatingPw, setUpdatingPw] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+
+  async function updatePassword() {
+    if (pw.next.length < 8) {
+      toast.error("Use at least 8 characters for your new password.");
+      return;
+    }
+    if (pw.next !== pw.confirm) {
+      toast.error("The two passwords do not match.");
+      return;
+    }
+    setUpdatingPw(true);
+    const { error } = await supabase.auth.updateUser({ password: pw.next });
+    setUpdatingPw(false);
+    if (error) {
+      toast.error("Could not update your password", {
+        description: error.message,
+        action: { label: "Retry", onClick: () => void updatePassword() },
+      });
+      return;
+    }
+    setPw({ next: "", confirm: "" });
+    toast.success("Password updated");
+  }
+
+  async function sendResetLink() {
+    if (!user?.email) {
+      toast.error("No email address on this account.");
+      return;
+    }
+    setSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSendingReset(false);
+    if (error) {
+      toast.error("Could not send the recovery email", {
+        description: error.message,
+        action: { label: "Retry", onClick: () => void sendResetLink() },
+      });
+      return;
+    }
+    toast.success("Recovery email sent", { description: `Check ${user.email} for the reset link.` });
+  }
 
   useEffect(() => {
     if (profile) {
