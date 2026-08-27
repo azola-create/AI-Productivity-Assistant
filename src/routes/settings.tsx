@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CalendarDays, Loader2, Mail, Moon, Save, Sun } from "lucide-react";
+import { CalendarDays, KeyRound, Loader2, Mail, Moon, Save, Sun } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
