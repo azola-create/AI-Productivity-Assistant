@@ -152,6 +152,53 @@ function SettingsPage() {
 
         <div className="space-y-6">
           <div className="panel space-y-4 p-5">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <KeyRound className="size-4" aria-hidden />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold">Password &amp; security</h2>
+                <p className="text-sm text-muted-foreground">Change your password, or email yourself a reset link.</p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="s-pw">New password</Label>
+                <Input
+                  id="s-pw"
+                  type="password"
+                  autoComplete="new-password"
+                  value={pw.next}
+                  onChange={(e) => setPw({ ...pw, next: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="s-pw2">Confirm password</Label>
+                <Input
+                  id="s-pw2"
+                  type="password"
+                  autoComplete="new-password"
+                  value={pw.confirm}
+                  onChange={(e) => setPw({ ...pw, confirm: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void updatePassword()} disabled={updatingPw}>
+                {updatingPw ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                Update password
+              </Button>
+              <Button variant="outline" onClick={() => void sendResetLink()} disabled={sendingReset}>
+                {sendingReset ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                Email me a reset link
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Forgot your password? The reset link opens a secure page where you can choose a new one.
+            </p>
+          </div>
+
+          <div className="panel space-y-4 p-5">
             <div>
               <h2 className="text-lg font-semibold">Appearance</h2>
               <p className="text-sm text-muted-foreground">Choose the theme that suits your workspace.</p>
