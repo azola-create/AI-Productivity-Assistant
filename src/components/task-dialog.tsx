@@ -180,7 +180,9 @@ export function TaskDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => void save()}>{task ? "Save changes" : "Add task"}</Button>
+          <Button onClick={() => void save()} disabled={create.isPending || update.isPending}>
+            {create.isPending || update.isPending ? "Saving…" : task ? "Save changes" : "Add task"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
