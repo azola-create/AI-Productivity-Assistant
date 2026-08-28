@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Copy, FileDown, Loader2, Mail, Maximize2, Minimize2, Sparkles, Undo2 } from "lucide-react";
+import { Copy, FileDown, Loader2, Mail, Maximize2, Minimize2, RefreshCw, Save, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
-import { AiNotice, ReadAloud } from "@/components/ai-output";
+import { AiNotice, AssumptionsCard, ReadAloud, ReviewGate } from "@/components/ai-output";
 import { EmptyState, ErrorState, LoadingLines } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { draftEmail, type EmailDraft } from "@/lib/ai.functions";
-import { exportDocx, exportPdf } from "@/lib/export";
+import { AI_DISCLAIMER, exportDocx, exportPdf } from "@/lib/export";
 import { takeEmailPrefill } from "@/lib/handoff";
 import { useInvalidateWorkspace } from "@/lib/queries";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,7 +54,16 @@ function EmailPage() {
     tone: "Professional",
   });
   const [draft, setDraft] = useState<EmailDraft | null>(null);
+  const [reviewed, setReviewed] = useState(false);
+  const [saved, setSaved] = useState(false);
   const previous = useRef<EmailDraft | null>(null);
+
+  // Any change to the draft invalidates the review confirmation.
+  function updateDraft(next: EmailDraft) {
+    setDraft(next);
+    setReviewed(false);
+    setSaved(false);
+  }
 
   // Prefill from a reviewed meeting hand-off.
   useEffect(() => {
@@ -66,10 +75,12 @@ function EmailPage() {
 
   function restore(snapshot: EmailDraft | null) {
     setDraft(snapshot);
+    setReviewed(false);
+    setSaved(false);
   }
 
   const run = useMutation({
-    mutationFn: async (mode: "generate" | "shorten" | "expand") =>
+    mutationFn: async (mode: "generate" | "shorten" | "expand" | "regenerate") =>
       generate({
         data: {
           ...form,
@@ -81,43 +92,58 @@ function EmailPage() {
     onMutate: () => {
       previous.current = draft;
     },
-    onSuccess: async (result, mode) => {
+    onSuccess: (result, mode) => {
       const snapshot = previous.current;
       setDraft(result);
+      setReviewed(false);
+      setSaved(false);
       if (mode === "generate") {
-        toast.success("Draft ready", { description: "Edit anything before you send." });
+        toast.success("Draft ready", { description: "Review and edit it before you save or send." });
       } else {
-        toast.success(mode === "shorten" ? "Draft shortened" : "Draft expanded", {
-          description: "You can undo this change.",
-          action: snapshot
-            ? {
-                label: "Undo",
-                onClick: () => {
-                  restore(snapshot);
-                  toast("Previous draft restored");
-                },
-              }
-            : undefined,
-        });
-      }
-      if (user) {
-        const { error } = await supabase.from("emails").insert({
-          user_id: user.id,
-          subject: result.subject,
-          body: draftToText(result),
-          inputs: form as unknown as never,
-        });
-        if (error) {
-          toast.error("Draft not saved to your workspace", { description: error.message });
-          return;
-        }
-        invalidate();
+        toast.success(
+          mode === "shorten" ? "Draft shortened" : mode === "expand" ? "Draft expanded" : "Draft regenerated",
+          {
+            description: "You can undo this change.",
+            action: snapshot
+              ? {
+                  label: "Undo",
+                  onClick: () => {
+                    restore(snapshot);
+                    toast("Previous draft restored");
+                  },
+                }
+              : undefined,
+          },
+        );
       }
     },
     onError: (e: Error) => toast.error("Could not draft the email", { description: e.message }),
   });
 
-  const fullText = draft ? `Subject: ${draft.subject}\n\n${draftToText(draft)}` : "";
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("You need to be signed in to save.");
+      if (!draft) throw new Error("Nothing to save yet.");
+      const { error } = await supabase.from("emails").insert({
+        user_id: user.id,
+        subject: draft.subject,
+        body: draftToText(draft),
+        inputs: form as unknown as never,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      setSaved(true);
+      invalidate();
+      toast.success("Draft saved to your workspace");
+    },
+    onError: (e: Error) => toast.error("Could not save the draft", { description: e.message }),
+  });
+
+  const gateHint = "Confirm you reviewed and edited this draft first.";
+  const fullText = draft
+    ? `Subject: ${draft.subject}\n\n${draftToText(draft)}\n\n---\n${AI_DISCLAIMER}`
+    : "";
   const canGenerate = Boolean(form.audience.trim() && form.objective.trim());
 
   return (
@@ -223,6 +249,9 @@ function EmailPage() {
                   <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate("expand")}>
                     <Maximize2 className="mr-2 size-4" /> Expand
                   </Button>
+                  <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate("regenerate")}>
+                    <RefreshCw className="mr-2 size-4" /> Regenerate with my edits
+                  </Button>
                   {previous.current ? (
                     <Button
                       size="sm"
@@ -235,27 +264,45 @@ function EmailPage() {
                       <Undo2 className="mr-2 size-4" /> Undo change
                     </Button>
                   ) : null}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(fullText);
-                      toast.success("Email copied");
-                    }}
-                  >
-                    <Copy className="mr-2 size-4" /> Copy
+                  <Button size="sm" disabled={!reviewed || saved || save.isPending} title={reviewed ? undefined : gateHint} onClick={() => save.mutate()}>
+                    {save.isPending ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 size-4" />
+                    )}
+                    {saved ? "Saved" : "Save draft"}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => void exportPdf(draft.subject || "Email draft", [{ body: fullText }])}
+                    disabled={!reviewed}
+                    title={reviewed ? undefined : gateHint}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(fullText);
+                      toast.success("Email copied", { description: "Ready to send." });
+                    }}
+                  >
+                    <Copy className="mr-2 size-4" /> Copy to send
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!reviewed}
+                    title={reviewed ? undefined : gateHint}
+                    onClick={() =>
+                      void exportPdf(draft.subject || "Email draft", [{ body: draftToText(draft) }])
+                    }
                   >
                     <FileDown className="mr-2 size-4" /> PDF
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => void exportDocx(draft.subject || "Email draft", [{ body: fullText }])}
+                    disabled={!reviewed}
+                    title={reviewed ? undefined : gateHint}
+                    onClick={() =>
+                      void exportDocx(draft.subject || "Email draft", [{ body: draftToText(draft) }])
+                    }
                   >
                     <FileDown className="mr-2 size-4" /> Word
                   </Button>
@@ -279,7 +326,7 @@ function EmailPage() {
                 <Input
                   id="e-subject"
                   value={draft.subject}
-                  onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
+                  onChange={(e) => updateDraft({ ...draft, subject: e.target.value })}
                 />
               </div>
               <div className="space-y-1.5">
@@ -289,10 +336,17 @@ function EmailPage() {
                   rows={16}
                   value={draftToText(draft)}
                   onChange={(e) =>
-                    setDraft({ ...draft, greeting: "", body: e.target.value, callToAction: "", signature: "" })
+                    updateDraft({ ...draft, greeting: "", body: e.target.value, callToAction: "", signature: "" })
                   }
                 />
               </div>
+              <AssumptionsCard assumptions={draft.assumptions} uncertainties={draft.uncertainties} />
+              <ReviewGate
+                id="email-review-gate"
+                checked={reviewed}
+                onChange={setReviewed}
+                hint="Required before you can save, copy to send, or export this draft."
+              />
               <AiNotice />
             </>
           )}
