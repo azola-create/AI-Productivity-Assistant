@@ -16,7 +16,7 @@ export function AiNotice({ className = "" }: { className?: string }) {
       role="note"
     >
       <Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-      Review AI-generated content before use. You make the final decision.
+      AI-generated content may be incomplete or inaccurate. Review and edit before use.
     </p>
   );
 }
