@@ -1,5 +1,6 @@
-import { Info, Pause, Play, RotateCcw, Square, Volume2 } from "lucide-react";
+import { HelpCircle, Info, Lightbulb, Pause, Play, RotateCcw, Square, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,93 @@ export function AiNotice({ className = "" }: { className?: string }) {
       <Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
       AI-generated content may be incomplete or inaccurate. Review and edit before use.
     </p>
+  );
+}
+
+/** What the AI assumed, and what it is unsure about. Shown on every AI output card. */
+export function AssumptionsCard({
+  assumptions,
+  uncertainties,
+  className = "",
+}: {
+  assumptions?: string[];
+  uncertainties?: string[];
+  className?: string;
+}) {
+  const a = (assumptions ?? []).filter(Boolean);
+  const u = (uncertainties ?? []).filter(Boolean);
+
+  return (
+    <section
+      className={`rounded-lg border border-border bg-muted/40 p-4 ${className}`}
+      aria-label="Assumptions and uncertainty"
+    >
+      <h4 className="text-sm font-semibold">Assumptions & uncertainty</h4>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Lightbulb className="h-3.5 w-3.5" aria-hidden /> AURA assumed
+          </p>
+          {a.length ? (
+            <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+              {a.map((x, i) => (
+                <li key={i}>{x}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted-foreground">No assumptions were reported.</p>
+          )}
+        </div>
+        <div>
+          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <HelpCircle className="h-3.5 w-3.5" aria-hidden /> Check before you rely on this
+          </p>
+          {u.length ? (
+            <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+              {u.map((x, i) => (
+                <li key={i}>{x}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted-foreground">Nothing flagged — still read it end to end.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Confirmation gate: saving, exporting or sending stays disabled until this is ticked. */
+export function ReviewGate({
+  id,
+  checked,
+  onChange,
+  label = "I have reviewed and edited this AI content.",
+  hint = "Required before you can save, export or send it.",
+  className = "",
+}: {
+  id: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label?: string;
+  hint?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`flex items-start gap-3 rounded-lg border border-border p-3 ${className}`}>
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(v) => onChange(v === true)}
+        aria-describedby={`${id}-hint`}
+      />
+      <label htmlFor={id} className="cursor-pointer text-sm leading-snug">
+        <span className="font-medium text-foreground">{label}</span>
+        <span id={`${id}-hint`} className="mt-0.5 block text-xs text-muted-foreground">
+          {hint}
+        </span>
+      </label>
+    </div>
   );
 }
 
