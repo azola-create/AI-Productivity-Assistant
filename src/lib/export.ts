@@ -1,5 +1,8 @@
 import { saveAs } from "file-saver";
 
+export const AI_DISCLAIMER =
+  "AI-generated content may be incomplete or inaccurate. Review and edit before use.";
+
 export type ExportSection = { heading?: string; body?: string; bullets?: string[] };
 
 function safeName(title: string) {
@@ -27,7 +30,7 @@ export async function exportPdf(title: string, sections: ExportSection[]) {
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(120);
-  doc.text("Generated in AURAwork - review AI-generated content before use.", margin, y);
+  doc.text(doc.splitTextToSize(`Generated in AURAwork. ${AI_DISCLAIMER}`, width), margin, y);
   doc.setTextColor(20);
   y += 24;
 
@@ -60,6 +63,20 @@ export async function exportPdf(title: string, sections: ExportSection[]) {
     y += 10;
   }
 
+  ensure(40);
+  y += 8;
+  doc.setDrawColor(200);
+  doc.line(margin, y, margin + width, y);
+  y += 16;
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  for (const line of doc.splitTextToSize(AI_DISCLAIMER, width) as string[]) {
+    ensure(14);
+    doc.text(line, margin, y);
+    y += 12;
+  }
+
   doc.save(`${safeName(title)}.pdf`);
 }
 
@@ -72,7 +89,7 @@ export async function exportDocx(title: string, sections: ExportSection[]) {
       alignment: AlignmentType.LEFT,
       children: [
         new TextRun({
-          text: "Generated in AURAwork — review AI-generated content before use.",
+          text: `Generated in AURAwork. ${AI_DISCLAIMER}`,
           italics: true,
           size: 18,
           color: "6B7280",
@@ -101,6 +118,12 @@ export async function exportDocx(title: string, sections: ExportSection[]) {
     }
     children.push(new Paragraph({ children: [] }));
   }
+
+  children.push(
+    new Paragraph({
+      children: [new TextRun({ text: AI_DISCLAIMER, italics: true, size: 18, color: "6B7280" })],
+    }),
+  );
 
   const doc = new Document({
     styles: { default: { document: { run: { font: "Arial", size: 22 } } } },
