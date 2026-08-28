@@ -116,6 +116,8 @@ If there is not enough information, say so in one sentence and still propose the
 export type MeetingSummary = {
   title: string;
   summary: string;
+  assumptions: string[];
+  uncertainties: string[];
   keyPoints: string[];
   decisions: string[];
   actions: {
@@ -129,7 +131,11 @@ export type MeetingSummary = {
 
 export const summariseMeeting = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ notes: z.string().min(1), today: z.string() }).parse(d))
+  .inputValidator((d) =>
+    z
+      .object({ notes: z.string().min(1), today: z.string(), existing: z.string().optional().default("") })
+      .parse(d),
+  )
   .handler(async ({ data }): Promise<MeetingSummary> => {
     try {
       const raw = await callAi({
@@ -138,9 +144,10 @@ Summarise pasted meeting notes for a manager. Be faithful to the notes; never in
 Deadlines must be ISO dates (YYYY-MM-DD) inferred sensibly from today's date; use "" when the notes give no signal.
 Owners are suggestions only — use "Unassigned" if unclear.
 Reply with JSON only:
-{"title":string,"summary":string,"keyPoints":string[],"decisions":string[],"actions":[{"title":string,"owner":string,"deadline":string,"durationMinutes":number,"priority":"high"|"medium"|"low"}]}
-"summary" is 2-4 sentences. Keep each list item to one line.`,
-        user: `Today is ${data.today}.\n\nMeeting notes:\n${data.notes}`,
+{"title":string,"summary":string,"keyPoints":string[],"decisions":string[],"actions":[{"title":string,"owner":string,"deadline":string,"durationMinutes":number,"priority":"high"|"medium"|"low"}],"assumptions":string[],"uncertainties":string[]}
+"summary" is 2-4 sentences. Keep each list item to one line.
+"assumptions" lists 1-4 things you inferred rather than read directly (owners, dates, scope). "uncertainties" lists 1-4 things a human must verify or that the notes leave ambiguous. Never leave both empty; if genuinely none, say so in one item.`,
+        user: `Today is ${data.today}.${data.existing ? `\n\nThe manager has edited a previous summary. Use their edits as the source of truth and refine from there:\n${data.existing}` : ""}\n\nMeeting notes:\n${data.notes}`,
         json: true,
       });
       const parsed = parseJson<MeetingSummary>(raw, {
@@ -149,6 +156,8 @@ Reply with JSON only:
         keyPoints: [],
         decisions: [],
         actions: [],
+        assumptions: [],
+        uncertainties: [],
       });
       return {
         title: parsed.title || "Meeting summary",
@@ -156,6 +165,8 @@ Reply with JSON only:
         keyPoints: parsed.keyPoints ?? [],
         decisions: parsed.decisions ?? [],
         actions: parsed.actions ?? [],
+        assumptions: parsed.assumptions ?? [],
+        uncertainties: parsed.uncertainties ?? [],
       };
     } catch (e) {
       fail(e);
@@ -170,6 +181,8 @@ export type EmailDraft = {
   body: string;
   callToAction: string;
   signature: string;
+  assumptions: string[];
+  uncertainties: string[];
 };
 
 export const draftEmail = createServerFn({ method: "POST" })
@@ -183,7 +196,7 @@ export const draftEmail = createServerFn({ method: "POST" })
         keyPoints: z.string().optional().default(""),
         tone: z.string(),
         senderName: z.string().optional().default(""),
-        mode: z.enum(["generate", "shorten", "expand"]).optional().default("generate"),
+        mode: z.enum(["generate", "shorten", "expand", "regenerate"]).optional().default("generate"),
         existing: z.string().optional().default(""),
       })
       .parse(d),
@@ -194,14 +207,17 @@ export const draftEmail = createServerFn({ method: "POST" })
         ? "Rewrite the existing draft to be materially shorter while keeping every commitment and the call to action."
         : data.mode === "expand"
           ? "Expand the existing draft with useful specifics and context. Do not pad with filler."
-          : "Write a fresh draft.";
+          : data.mode === "regenerate"
+            ? "Regenerate the draft. The existing draft already contains the manager's own edits: preserve their wording, facts and intent, and improve clarity, flow and tone."
+            : "Write a fresh draft.";
     try {
       const raw = await callAi({
         system: `${BASE_STYLE}
 You write workplace email for a manager. ${modeLine}
 Match the requested tone exactly. Keep the body scannable — short paragraphs, a bullet list only when it genuinely helps.
 Reply with JSON only:
-{"subject":string,"greeting":string,"body":string,"callToAction":string,"signature":string}
+{"subject":string,"greeting":string,"body":string,"callToAction":string,"signature":string,"assumptions":string[],"uncertainties":string[]}
+"assumptions" lists 1-4 things you assumed about the reader, facts or context. "uncertainties" lists 1-4 things the sender must check before sending (placeholders, dates, commitments).
 Use \\n for line breaks inside body. The signature ends with the sender's name.
 If key context is missing, include one bracketed placeholder such as [confirm date] rather than inventing facts.`,
         user: JSON.stringify(data),
@@ -213,6 +229,8 @@ If key context is missing, include one bracketed placeholder such as [confirm da
         body: "",
         callToAction: "",
         signature: "",
+        assumptions: [],
+        uncertainties: [],
       });
     } catch (e) {
       fail(e);
@@ -226,20 +244,25 @@ export type ResearchOutput = {
   executiveSummary: string;
   insights: string[];
   recommendations: string[];
+  assumptions: string[];
+  uncertainties: string[];
 };
 
 export const analyseResearch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ text: z.string().min(1) }).parse(d))
+  .inputValidator((d) =>
+    z.object({ text: z.string().min(1), existing: z.string().optional().default("") }).parse(d),
+  )
   .handler(async ({ data }): Promise<ResearchOutput> => {
     try {
       const raw = await callAi({
         system: `${BASE_STYLE}
 Analyse pasted article text for a manager who has three minutes. Stay strictly inside the supplied text; flag gaps instead of filling them.
 Reply with JSON only:
-{"title":string,"executiveSummary":string,"insights":string[],"recommendations":string[]}
-"executiveSummary" is 3-5 sentences. Insights are factual takeaways; recommendations are practical actions for the manager.`,
-        user: data.text.slice(0, 40000),
+{"title":string,"executiveSummary":string,"insights":string[],"recommendations":string[],"assumptions":string[],"uncertainties":string[]}
+"executiveSummary" is 3-5 sentences. Insights are factual takeaways; recommendations are practical actions for the manager.
+"assumptions" lists 1-4 interpretations you made. "uncertainties" lists 1-4 gaps, ambiguities or claims the manager should verify.`,
+        user: `${data.existing ? `The manager has edited a previous analysis. Treat their edits as the source of truth and refine from there:\n${data.existing}\n\n---\n\n` : ""}${data.text.slice(0, 40000)}`,
         json: true,
       });
       return parseJson<ResearchOutput>(raw, {
@@ -247,6 +270,8 @@ Reply with JSON only:
         executiveSummary: "",
         insights: [],
         recommendations: [],
+        assumptions: [],
+        uncertainties: [],
       });
     } catch (e) {
       fail(e);
