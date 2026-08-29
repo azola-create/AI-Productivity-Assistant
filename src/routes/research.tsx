@@ -3,10 +3,18 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { format } from "date-fns";
-import { FileDown, Loader2, Save, Search, Sparkles } from "lucide-react";
+import { FileDown, Loader2, RefreshCw, Save, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app-shell";
-import { AiNotice, ReadAloud } from "@/components/ai-output";
+import {
+  AiNotice,
+  AssumptionsCard,
+  AuditTrail,
+  ReadAloud,
+  RegenerationHistory,
+  ReviewGate,
+  type RegenVersion,
+} from "@/components/ai-output";
 import { EmptyState, ErrorState, LoadingLines } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +22,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { analyseResearch, type ResearchOutput } from "@/lib/ai.functions";
+import { useAuditEvents, useAuditLog } from "@/lib/audit";
+import { summariseChanges } from "@/lib/diff";
 import { exportDocx, exportPdf } from "@/lib/export";
 import { useInvalidateWorkspace, useResearch } from "@/lib/queries";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,21 +51,89 @@ const toLines = (v: string) =>
     .map((l) => l.replace(/^[-•]\s*/, "").trim())
     .filter(Boolean);
 
+const snapshotOf = (o: ResearchOutput) => ({
+  Title: o.title,
+  "Executive summary": o.executiveSummary,
+  Insights: o.insights,
+  Recommendations: o.recommendations,
+});
+
+const outputToText = (o: ResearchOutput) =>
+  [o.executiveSummary, ...o.insights, ...o.recommendations].join("\n");
+
 function ResearchPage() {
   const { user } = useAuth();
   const invalidate = useInvalidateWorkspace();
   const historyQ = useResearch();
   const analyse = useServerFn(analyseResearch);
+  const logAudit = useAuditLog("research");
+  const auditQ = useAuditEvents("research");
 
   const [text, setText] = useState("");
   const [output, setOutput] = useState<ResearchOutput | null>(null);
   const [saved, setSaved] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
+  const [edited, setEdited] = useState(false);
+  const [versions, setVersions] = useState<RegenVersion[]>([]);
+
+  // Any edit invalidates the review confirmation.
+  function editOutput(next: ResearchOutput) {
+    setOutput(next);
+    setSaved(false);
+    setReviewed(false);
+    if (!edited) {
+      setEdited(true);
+      void logAudit("edited", { item: next.title, detail: "Manual edits made to the AI analysis." });
+    }
+  }
+
+  function confirmReview(v: boolean) {
+    setReviewed(v);
+    if (v) {
+      void logAudit("reviewed", {
+        item: output?.title ?? "Research analysis",
+        detail: "Confirmed the analysis was reviewed and edited.",
+      });
+    }
+  }
 
   const run = useMutation({
-    mutationFn: async () => analyse({ data: { text } }),
-    onSuccess: (result) => {
+    mutationFn: async (mode: "generate" | "regenerate") =>
+      analyse({ data: { text, existing: mode === "regenerate" && output ? outputToText(output) : "" } }),
+    onSuccess: (result, mode) => {
+      const previous = output;
       setOutput(result);
       setSaved(false);
+      setReviewed(false);
+      setEdited(false);
+
+      if (mode === "regenerate" && previous) {
+        const restorePoint = previous;
+        setVersions((v) => [
+          {
+            id: `${Date.now()}`,
+            label: `Regeneration ${v.length + 1}`,
+            at: new Date().toISOString(),
+            changes: summariseChanges(snapshotOf(previous), snapshotOf(result)),
+            restore: () => {
+              setOutput(restorePoint);
+              setReviewed(false);
+              setSaved(false);
+              toast("Previous version restored");
+            },
+          },
+          ...v,
+        ]);
+        void logAudit("regenerated", {
+          item: result.title,
+          detail: "Regenerated using the manager's current edits as context.",
+        });
+        toast.success("Analysis regenerated", { description: "Check the regeneration history for what changed." });
+        return;
+      }
+
+      setVersions([]);
+      void logAudit("generated", { item: result.title, detail: "First analysis generated from pasted text." });
       toast.success("Analysis ready", { description: "Edit anything before you save it." });
     },
     onError: (e: Error) => toast.error("Could not analyse the text", { description: e.message }),
@@ -81,6 +159,7 @@ function ResearchPage() {
     onSuccess: (id) => {
       setSaved(true);
       invalidate();
+      void logAudit("saved", { item: output?.title, itemId: id, detail: "Saved to the workspace after review." });
       toast.success("Analysis saved", {
         description: output?.title,
         action: {
@@ -110,6 +189,13 @@ function ResearchPage() {
     : [];
 
   const readable = output ? [output.executiveSummary, ...output.insights, ...output.recommendations].join(". ") : "";
+  const gateHint = "Confirm you reviewed and edited this analysis first.";
+
+  function exportAs(kind: "PDF" | "Word") {
+    if (!output) return;
+    void (kind === "PDF" ? exportPdf(output.title, sections) : exportDocx(output.title, sections));
+    void logAudit("exported", { item: output.title, detail: `Exported as ${kind} with the AI disclaimer attached.` });
+  }
 
   return (
     <AppLayout
@@ -129,7 +215,7 @@ function ResearchPage() {
               placeholder="Paste the full text here."
             />
           </div>
-          <Button disabled={!text.trim() || run.isPending} onClick={() => run.mutate()}>
+          <Button disabled={!text.trim() || run.isPending} onClick={() => run.mutate("generate")}>
             {run.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
             {run.isPending ? "Analysing…" : "Analyse text"}
           </Button>
@@ -137,17 +223,17 @@ function ResearchPage() {
 
         <div className="space-y-6">
           <div className="panel space-y-4 p-5">
-            {run.isPending ? (
+            {run.isPending && !output ? (
               <div className="space-y-3">
                 <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
                   <Loader2 className="size-4 animate-spin" /> AURA is reading the text…
                 </p>
                 <LoadingLines rows={7} />
               </div>
-            ) : run.isError ? (
+            ) : run.isError && !output ? (
               <ErrorState
                 message={(run.error as Error).message || "The text could not be analysed."}
-                onRetry={() => run.mutate()}
+                onRetry={() => run.mutate("generate")}
               />
             ) : !output ? (
               <EmptyState
@@ -155,7 +241,7 @@ function ResearchPage() {
                 title="Nothing analysed yet"
                 description="Paste an article and AURA will summarise it for a three-minute read."
                 action={
-                  <Button disabled={!text.trim()} onClick={() => run.mutate()}>
+                  <Button disabled={!text.trim()} onClick={() => run.mutate("generate")}>
                     <Sparkles className="mr-2 size-4" /> Analyse text
                   </Button>
                 }
@@ -166,7 +252,25 @@ function ResearchPage() {
                   <h2 className="text-lg font-semibold">Editable analysis</h2>
                   <div className="flex flex-wrap gap-2">
                     <ReadAloud text={readable} />
-                    <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending || saved}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={run.isPending}
+                      onClick={() => run.mutate("regenerate")}
+                    >
+                      {run.isPending ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 size-4" />
+                      )}
+                      Regenerate with my edits
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => save.mutate()}
+                      disabled={!reviewed || save.isPending || saved}
+                      title={reviewed ? undefined : gateHint}
+                    >
                       {save.isPending ? (
                         <Loader2 className="mr-2 size-4 animate-spin" />
                       ) : (
@@ -174,24 +278,40 @@ function ResearchPage() {
                       )}
                       {saved ? "Saved" : "Save"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => void exportPdf(output.title, sections)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!reviewed}
+                      title={reviewed ? undefined : gateHint}
+                      onClick={() => exportAs("PDF")}
+                    >
                       <FileDown className="mr-2 size-4" /> PDF
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => void exportDocx(output.title, sections)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!reviewed}
+                      title={reviewed ? undefined : gateHint}
+                      onClick={() => exportAs("Word")}
+                    >
                       <FileDown className="mr-2 size-4" /> Word
                     </Button>
                   </div>
                 </div>
+
+                {run.isError ? (
+                  <ErrorState
+                    message={(run.error as Error).message || "That regeneration failed."}
+                    onRetry={() => run.mutate("regenerate")}
+                  />
+                ) : null}
 
                 <div className="space-y-1.5">
                   <Label htmlFor="r-title">Title</Label>
                   <Input
                     id="r-title"
                     value={output.title}
-                    onChange={(e) => {
-                      setOutput({ ...output, title: e.target.value });
-                      setSaved(false);
-                    }}
+                    onChange={(e) => editOutput({ ...output, title: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -200,10 +320,7 @@ function ResearchPage() {
                     id="r-summary"
                     rows={5}
                     value={output.executiveSummary}
-                    onChange={(e) => {
-                      setOutput({ ...output, executiveSummary: e.target.value });
-                      setSaved(false);
-                    }}
+                    onChange={(e) => editOutput({ ...output, executiveSummary: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -212,10 +329,7 @@ function ResearchPage() {
                     id="r-insights"
                     rows={6}
                     value={output.insights.join("\n")}
-                    onChange={(e) => {
-                      setOutput({ ...output, insights: toLines(e.target.value) });
-                      setSaved(false);
-                    }}
+                    onChange={(e) => editOutput({ ...output, insights: toLines(e.target.value) })}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -224,12 +338,18 @@ function ResearchPage() {
                     id="r-recs"
                     rows={6}
                     value={output.recommendations.join("\n")}
-                    onChange={(e) => {
-                      setOutput({ ...output, recommendations: toLines(e.target.value) });
-                      setSaved(false);
-                    }}
+                    onChange={(e) => editOutput({ ...output, recommendations: toLines(e.target.value) })}
                   />
                 </div>
+
+                <AssumptionsCard assumptions={output.assumptions} uncertainties={output.uncertainties} />
+                <RegenerationHistory versions={versions} />
+                <ReviewGate
+                  id="research-review-gate"
+                  checked={reviewed}
+                  onChange={confirmReview}
+                  hint="Required before you can save or export this analysis."
+                />
                 <AiNotice />
               </>
             )}
@@ -257,6 +377,8 @@ function ResearchPage() {
               </ul>
             )}
           </div>
+
+          <AuditTrail events={auditQ.data ?? []} isLoading={auditQ.isLoading} />
         </div>
       </div>
     </AppLayout>
