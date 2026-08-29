@@ -1,6 +1,20 @@
-import { HelpCircle, Info, Lightbulb, Pause, Play, RotateCcw, Square, Volume2 } from "lucide-react";
+import {
+  History,
+  HelpCircle,
+  Info,
+  Lightbulb,
+  Pause,
+  Play,
+  RotateCcw,
+  ScrollText,
+  Square,
+  Undo2,
+  Volume2,
+} from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AUDIT_LABELS, type AuditEvent } from "@/lib/audit";
 import {
   Select,
   SelectContent,
