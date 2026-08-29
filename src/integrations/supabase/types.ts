@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_audit_events: {
+        Row: {
+          action: string
+          created_at: string
+          detail: string
+          id: string
+          item_id: string | null
+          item_label: string
+          surface: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          detail?: string
+          id?: string
+          item_id?: string | null
+          item_label?: string
+          surface: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          detail?: string
+          id?: string
+          item_id?: string | null
+          item_label?: string
+          surface?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           chat_id: string
