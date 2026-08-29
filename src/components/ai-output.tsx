@@ -1,6 +1,20 @@
-import { HelpCircle, Info, Lightbulb, Pause, Play, RotateCcw, Square, Volume2 } from "lucide-react";
+import {
+  History,
+  HelpCircle,
+  Info,
+  Lightbulb,
+  Pause,
+  Play,
+  RotateCcw,
+  ScrollText,
+  Square,
+  Undo2,
+  Volume2,
+} from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AUDIT_LABELS, type AuditEvent } from "@/lib/audit";
 import {
   Select,
   SelectContent,
@@ -160,5 +174,103 @@ export function ReadAloud({ text, label = "Read aloud" }: { text: string; label?
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+/** One saved version of an AI output, kept locally while the user refines it. */
+export type RegenVersion = {
+  id: string;
+  label: string;
+  at: string;
+  changes: string[];
+  restore?: () => void;
+};
+
+/** Shows what changed across regenerations before the user finalises the output. */
+export function RegenerationHistory({
+  versions,
+  className = "",
+}: {
+  versions: RegenVersion[];
+  className?: string;
+}) {
+  if (!versions.length) return null;
+
+  return (
+    <section
+      className={`rounded-lg border border-border p-4 ${className}`}
+      aria-label="Regeneration history"
+    >
+      <h4 className="flex items-center gap-1.5 text-sm font-semibold">
+        <History className="h-4 w-4" aria-hidden /> Regeneration history
+      </h4>
+      <ol className="mt-3 space-y-3">
+        {versions.map((v) => (
+          <li key={v.id} className="border-l-2 border-border pl-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium text-foreground">
+                {v.label}
+                <span className="ml-2 font-normal text-muted-foreground">
+                  {format(new Date(v.at), "d MMM HH:mm")}
+                </span>
+              </p>
+              {v.restore ? (
+                <Button size="sm" variant="ghost" onClick={v.restore} aria-label={`Restore ${v.label}`}>
+                  <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Restore
+                </Button>
+              ) : null}
+            </div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+              {v.changes.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** Audit trail: when AI content was reviewed, edited, saved, regenerated or exported. */
+export function AuditTrail({
+  events,
+  isLoading = false,
+  className = "",
+  title = "Audit trail",
+}: {
+  events: AuditEvent[];
+  isLoading?: boolean;
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <section className={`panel space-y-2 p-5 ${className}`} aria-label={title}>
+      <h3 className="flex items-center gap-1.5 text-base font-semibold">
+        <ScrollText className="h-4 w-4" aria-hidden /> {title}
+      </h3>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading activity…</p>
+      ) : !events.length ? (
+        <p className="text-sm text-muted-foreground">
+          Reviews, edits, saves, regenerations and exports will be recorded here.
+        </p>
+      ) : (
+        <ul className="text-sm">
+          {events.map((e) => (
+            <li key={e.id} className="flex flex-wrap justify-between gap-2 border-b border-border py-2 last:border-0">
+              <span className="text-foreground">
+                {AUDIT_LABELS[e.action] ?? e.action}
+                {e.item_label ? <span className="text-muted-foreground"> · {e.item_label}</span> : null}
+                {e.detail ? <span className="block text-xs text-muted-foreground">{e.detail}</span> : null}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {format(new Date(e.created_at), "d MMM HH:mm")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
